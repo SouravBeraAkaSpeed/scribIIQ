@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+/src/components/Canvas/canvas.tsx
+/src/components/provider/liveblocks-provider
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -29,8 +31,7 @@ yarn-error.log*
 .env*.local
 
 /.env
-/components/Canvas
-/provider/liveblocks-provider
+
 
 
 # vercel
