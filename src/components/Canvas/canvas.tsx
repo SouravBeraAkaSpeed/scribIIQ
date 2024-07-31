@@ -1,6 +1,8 @@
 "use client";
 import {
   Footer,
+  LiveCollaborationTrigger,
+  MainMenu,
   WelcomeScreen,
   convertToExcalidrawElements,
 } from "@excalidraw/excalidraw";
@@ -14,8 +16,8 @@ import {
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types/types";
 import dynamic from "next/dynamic";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { Button } from "../ui/button";
+import { useEffect, useState, useCallback, useRef, Dispatch, SetStateAction } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Sparkles,
   NotebookPen,
@@ -29,6 +31,7 @@ import {
   Sun,
   Moon,
   Minimize,
+  User,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -38,16 +41,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
+import { createClient } from "@liveblocks/client";
 import Draggable from "react-draggable";
-import { toast } from "../ui/use-toast";
+import { toast } from "@/components/ui/use-toast";
 import axios from "axios";
 import { formatSeconds } from "@/lib/utils";
 
-import { Input } from "../ui/input";
-import { v4 } from "uuid";
-import { convertDownLoadReactComponentToImage } from "../convertComponentToImage";
+import { Input } from "@/components/ui/input";
+import { convertDownLoadReactComponentToImage } from "@/components/convertComponentToImage";
 import { Session } from "next-auth";
+import { useRouter } from "next/navigation";
+import Loader2 from "@/components/Loader2";
+import { useMyPresence, useOthers, useSelf } from "@liveblocks/react/suspense";
+import Image from "next/image";
+import { useModal } from "../hooks/useModal";
+import Cursor from "../Cursor";
+// import { useMyPresence } from "../../../liveblocks.config";
+
+
 
 const Excalidraw = dynamic(
   async () => (await import("@excalidraw/excalidraw")).Excalidraw,
@@ -56,16 +68,26 @@ const Excalidraw = dynamic(
   },
 );
 
-const FunctionGraph = dynamic(async () => await import("../graphs/function"), {
+const FunctionGraph = dynamic(async () => await import("@/components/graphs/function"), {
   ssr: false,
 });
 
 interface CanvasProps {
-  setSession: React.Dispatch<React.SetStateAction<Session | null>>,
+
+  params: {
+    id: string;
+  },
   session: Session | null,
+  setSession: Dispatch<SetStateAction<Session | null>>
 }
 
-const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
+const Canvas: React.FC<CanvasProps> = ({ params, session }) => {
+  const [client, setclient] = useState<any>(null)
+  // const presence = useMyPresence()
+  const [{ cursor }, updateMyPresence] = useMyPresence();
+
+  const [room, setRoom] = useState<any>(null)
+  const [leave, setLeave] = useState<any>(null)
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI>();
   const [initialData, setInitialData] = useState<ExcalidrawInitialDataState>();
   const [currentElements, setCurrentElements] = useState<
@@ -78,21 +100,31 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
   const [activeEmbeddable, setActiveEmbeddable] = useState<ExcalidrawElement[]>(
     [],
   );
+  const { onOpen } = useModal()
 
   const [canvasPrompts, setcanvasPrompts] = useState<
     { role: string; content: string }[]
   >([]);
+
+  const users = useOthers();
+  const currentUser = useSelf();
+  const hasMoreUsers = users.length > 2;
 
   const [isYoutubeExplaination, setIsYoutubeExplaination] = useState(false);
 
   const [currentTransriptChunks, setCurrentTransriptChunks] = useState<
     { duration: number; text: string; time: number }[]
   >([]);
+  const [ismOunted, setIsmOunted] = useState(false)
+  // let isFirstChunk = true;
 
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isdarkMode, setIsdarkMode] = useState(false)
 
+
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const [isCollaborating, setIsCollaborating] = useState(false);
 
   const [functionPlots, setFunctionPlots] = useState<
     {
@@ -106,6 +138,88 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
   >([]);
 
   const elements = convertToExcalidrawElements([]);
+
+
+  const library = document.querySelector(".sidebar-trigger") as HTMLElement;
+
+  useEffect(() => {
+
+    setIsmOunted(true)
+
+    const client = createClient({
+      authEndpoint: async (room) => {
+        const response = await fetch("/api/liveblocks-auth", {
+          method: "POST",
+          body: JSON.stringify({ room, session }),
+        });
+        return await response.json();
+      }
+    });
+    setclient(client)
+    const { room, leave } = client.enterRoom(params.id, { initialPresence: { cursor: { x: 500, y: 500 }, spaceData: "" } });
+
+    setRoom(room)
+    setLeave(leave)
+
+
+
+
+
+
+
+
+    if (library) {
+      library.style.display = "none";
+    }
+
+    if (users.length > 0) {
+      setIsCollaborating(true)
+
+      users.map(({ connectionId, presence }) => {
+        
+        if (presence.spaceData) {
+
+          const UpadtedSpaceData = JSON.parse(presence.spaceData)
+
+          const Editor =  UpadtedSpaceData.editor;
+
+          if(Editor.info.id !== currentUser.info.id){
+
+            excalidrawAPI?.addFiles([
+              UpadtedSpaceData.files
+            ])
+  
+            excalidrawAPI?.updateScene({
+              elements: UpadtedSpaceData.elements,
+  
+            });
+          }
+
+        }
+      })
+    }
+
+  }, [ismOunted, library, users])
+
+
+
+
+  useEffect(() => {
+    const unsubscribe = room?.subscribe("others", (others: any, event: any) => {
+      for (const { id, presence } of others) {
+        const { x, y } = presence.cursor;
+        console.log(id, x, y)
+      }
+    })
+
+  }, [room])
+
+
+
+
+
+
+
 
   const handlePlotRemove = async (index: number) => {
     const plots = functionPlots.filter((plot, ind) => ind !== index);
@@ -184,7 +298,9 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
 
         const text_len = text.length - 500 > 0 ? text.length - 500 : 0;
 
-        const response = await axios.post("http://localhost:3002/api/neura", {
+        let message = ""
+
+        await axios.post("http://localhost:3002/api/neura/stream", {
           model: "NeuraAiSketchPad",
           messages: [
             ...canvasPrompts,
@@ -193,55 +309,148 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
               content: `${text.substring(text_len)} `,
             },
           ],
+        }, {
+          responseType: 'stream',
+          onDownloadProgress(progressEvent) {
+            const xhr = progressEvent.event.target;
+            const { responseText } = xhr;
+
+            if (responseText) {
+              const chunks = responseText.split('\n').filter((chunk: string) => chunk.trim() !== '');
+              let accumulated_message = "";
+              let created_at = "";
+              let role = "";
+              let end = false
+
+              chunks.forEach((chunk: string) => {
+                const parsed = JSON.parse(chunk);
+                accumulated_message += parsed.message.content;
+                created_at = parsed.created_at;
+                role = parsed.message.role;
+                if (parsed.done) {
+                  end = true;
+                }
+
+
+              });
+
+
+
+
+              // Calculate new width and height
+              const lineHeight = 25; // Adjust this value based on your font size
+              const charWidth = 15; // Approximate width of a character, adjust as necessary
+              const maxCharsPerLine = 50; // Adjust based on your desired line length
+
+              const wrappedText = wrapText(`${(activeTextElement[0] as ExcalidrawTextElement).text} \n\n ${accumulated_message}`, maxCharsPerLine);
+              const textLines = wrappedText.split("\n");
+
+              const newWidth =
+                Math.max(...textLines.map((line) => line.length)) * charWidth;
+              const newHeight = textLines.length * lineHeight;
+
+              updated_element = {
+                ...(activeTextElement[0] as ExcalidrawTextElement),
+                id: id,
+                width: newWidth + 20,
+                fontFamily: 3,
+                height: newHeight + 20,
+                baseline: newHeight + 20,
+                text: wrappedText,
+              };
+
+              excalidrawAPI?.updateScene({
+                elements: [
+                  ...excalidrawAPI
+                    .getSceneElements()
+                    .filter((elements) => elements.id !== id),
+                  updated_element,
+                ],
+
+                appState: excalidrawAPI.getAppState(),
+              });
+
+              message = accumulated_message
+
+
+
+
+
+
+
+            }
+          }
+        }).then(() => {
+          setcanvasPrompts([
+            ...canvasPrompts,
+            {
+              role: "user",
+              content: `${text.substring(text_len)}`,
+            },
+            {
+              role: "assistant",
+              content: message,
+            },
+          ]);
         });
 
-        const data = await response.data;
-        const newText = data.data.message.content;
+        // const data = await response.data;
+        // const newText = data.data.message.content;
 
-        setcanvasPrompts([
-          ...canvasPrompts,
-          {
-            role: "user",
-            content: `${text.substring(text_len)}`,
-          },
-          {
-            role: data.data.message.role,
-            content: data.data.message.content,
-          },
-        ]);
+        // setcanvasPrompts([
+        //   ...canvasPrompts,
+        //   {
+        //     role: "user",
+        //     content: `${text.substring(text_len)}`,
+        //   },
+        //   {
+        //     role: data.data.message.role,
+        //     content: data.data.message.content,
+        //   },
+        // ]);
 
-        // Calculate new width and height
-        const lineHeight = 25; // Adjust this value based on your font size
-        const charWidth = 15; // Approximate width of a character, adjust as necessary
-        const maxCharsPerLine = 50; // Adjust based on your desired line length
+        // // Calculate new width and height
+        // const lineHeight = 25; // Adjust this value based on your font size
+        // const charWidth = 15; // Approximate width of a character, adjust as necessary
+        // const maxCharsPerLine = 50; // Adjust based on your desired line length
 
-        const wrappedText = wrapText(newText, maxCharsPerLine);
-        const textLines = wrappedText.split("\n");
+        // const wrappedText = wrapText(newText, maxCharsPerLine);
+        // const textLines = wrappedText.split("\n");
 
-        const newWidth =
-          Math.max(...textLines.map((line) => line.length)) * charWidth;
-        const newHeight = textLines.length * lineHeight;
+        // const newWidth =
+        //   Math.max(...textLines.map((line) => line.length)) * charWidth;
+        // const newHeight = textLines.length * lineHeight;
 
-        updated_element = {
-          ...(activeTextElement[0] as ExcalidrawTextElement),
-          id: id,
-          width: newWidth + 20,
-          fontFamily: 3,
-          height: newHeight + 20,
-          baseline: newHeight + 20,
-          text: wrappedText,
-        };
+        // updated_element = {
+        //   ...(activeTextElement[0] as ExcalidrawTextElement),
+        //   id: id,
+        //   width: newWidth + 20,
+        //   fontFamily: 3,
+        //   height: newHeight + 20,
+        //   baseline: newHeight + 20,
+        //   text: wrappedText,
+        // };
 
-        excalidrawAPI?.updateScene({
-          elements: [
-            ...excalidrawAPI
-              .getSceneElements()
-              .filter((elements) => elements.id !== id),
-            updated_element,
-          ],
+        // excalidrawAPI?.updateScene({
+        //   elements: [
+        //     ...excalidrawAPI
+        //       .getSceneElements()
+        //       .filter((elements) => elements.id !== id),
+        //     updated_element,
+        //   ],
 
-          appState: excalidrawAPI.getAppState(),
-        });
+        //   appState: excalidrawAPI.getAppState(),
+        // });
+
+
+
+
+
+
+
+
+
+
       } else {
         toast({
           title: "Please select the text to auto complete!!",
@@ -458,7 +667,19 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
       const currentFiles = excalidrawAPI.getFiles();
 
       setCurrentElements(currentElement);
-      console.log(currentElement, currentFiles);
+
+
+
+      updateMyPresence({
+        spaceData: JSON.stringify({
+          Appstate: excalidrawAPI.getAppState(),
+          elements: excalidrawAPI.getSceneElements(),
+          files: excalidrawAPI.getFiles(),
+          editor: currentUser
+        })
+      })
+
+
 
       const embeddable_elements = currentElement.filter(
         (element) => element.type === "embeddable",
@@ -779,30 +1000,193 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
     });
   }, []);
 
+
+  // useEffect(() => {
+  //   console.log(presence);
+  // }, [presence])
+  const COLORS = [
+    "#E57373",
+    "#9575CD",
+    "#4FC3F7",
+    "#81C784",
+    "#FFF176",
+    "#FF8A65",
+    "#F06292",
+    "#7986CB",
+  ];
+
+
+
+
+
+  if (!ismOunted) {
+    return (
+      <div className="fixed inset-0 m-auto z-100  bg-white w-full h-full flex  flex-col space-y-3 flex-1 items-center justify-center text-black">
+        <Loader2 />
+        <div className="flex">
+          Loading
+        </div>
+      </div>
+    )
+  }
+
   return (
+
+
     <div
-      className={`m-2 h-full  ${isFullscreen ? 'fixed inset-0 m-auto z-120 w-full' : ''}  w-[90%] rounded-[10px] bg-transparent p-2`}
+      className={` h-full  ${isFullscreen ? 'fixed inset-0 m-auto z-120 w-full' : ' '} z-120  rounded-[10px] bg-transparent `}
       ref={canvasRef}
+
+      onPointerMove={(event) => {
+        // Update the user cursor position on every pointer move
+
+
+        updateMyPresence({
+          cursor: {
+            x: Math.round(event.clientX),
+            y: Math.round(event.clientY),
+          },
+        });
+
+        // console.log(Math.round(event.clientX),
+        //   Math.round(event.clientY))
+      }}
+      onPointerLeave={() =>
+        // When the pointer goes out, set cursor to null
+        updateMyPresence({
+          cursor: null,
+        })
+      }
     >
+
+      {
+
+        users.map(({ connectionId, presence }) => {
+          if (presence.cursor === null) {
+            return null;
+          }
+
+          return (
+            <Cursor
+              key={`cursor-${connectionId}`}
+              color={COLORS[connectionId % COLORS.length]}
+              x={presence.cursor.x}
+              y={presence.cursor.y}
+            />
+          );
+        })
+      }
+
+
       <Excalidraw
         excalidrawAPI={(api) => setExcalidrawAPI(api)}
         theme={isdarkMode ? "dark" : "light"}
         initialData={initialData}
         onScrollChange={handleScroll}
+        renderTopRightUI={() => (
+          <div className="flex items-center justify-center space-x-3">
+
+
+            <LiveCollaborationTrigger
+              isCollaborating={isCollaborating}
+              onSelect={() => {
+                console.log("opened")
+                onOpen("CollaborateModal", {
+                  data: {
+                    user: {
+                      email: session?.user?.email,
+                      id: (session?.user as {
+                        name?: string | null,
+                        email?: string | null,
+                        image?: string | null,
+                        id: string
+                      })?.id
+                    },
+                    room: {
+                      roomId: params.id,
+                      usersInRoom: [...users.map((u) => u.id), (session?.user as {
+                        name?: string | null,
+                        email?: string | null,
+                        image?: string | null,
+                        id: string
+                      })?.id]
+                    }
+                  }
+                })
+              }}
+            />
+
+
+            <div className="flex pl-3">
+              {users.slice(0, 2).map(({ info }, index) => {
+
+                return (
+
+                  <div key={index} id={info.email.toString()} className={`bg-blue-400 my-1 ml-[-14px] p-2 w-9 h-9 flex items-center justify-center
+                   rounded-full border-2`}> {info.name.split(" ").map((name) => name.substring(0, 1)).join("")}</div>
+
+                );
+              })}
+
+              {hasMoreUsers && <div className="rounded-full border-2 p-2 w-10 h-10 font-bold flex items-center justify-center ">+{users.length - 2}</div>}
+
+              {currentUser && (
+
+                <div id={currentUser.id.toString()} className={`bg-blue-600 my-1 ml-[-14px] p-2 w-9 h-9 flex items-center justify-center
+                rounded-full border-2`}> {currentUser.info.name.split(" ").map((name) => name.substring(0, 1)).join("")}</div>
+
+              )}
+            </div>
+          </div>
+        )}
+
       >
+
+
+
+
         <WelcomeScreen>
-          <WelcomeScreen.Hints.ToolbarHint>
+          <WelcomeScreen.Hints.ToolbarHint >
             <p> 1. Write any text & get the response from Ai. </p>
             <p>2. Youtube video Ai explanations </p>
             <p>
               {" "}
-              3. Mathematical Graphs are only for <br /> visualization purposes
-              ,i.e cannot be exported.
+              & many more
+              {/* 3. Mathematical Graphs are only for <br /> visualization purposes
+                  ,i.e cannot be exported. */}
             </p>
           </WelcomeScreen.Hints.ToolbarHint>
           <WelcomeScreen.Hints.MenuHint />
           <WelcomeScreen.Hints.HelpHint />
+          <WelcomeScreen.Center >
+
+
+            <WelcomeScreen.Center.Logo>
+              {isdarkMode ? <Image src={"/scribIQ_white.png"} alt="logo" className="z-140" height={300} width={300} /> : (
+
+                <Image src={"/scribIQ.png"} alt="logo" height={300} width={300} />
+              )}
+
+            </WelcomeScreen.Center.Logo>
+            <WelcomeScreen.Center.Heading>
+              Workspaces. Made. Smarter.
+            </WelcomeScreen.Center.Heading>
+          </WelcomeScreen.Center>
         </WelcomeScreen>
+
+        <MainMenu>
+          {/* <MainMenu.DefaultItems.LoadScene/> */}
+          {/* <MainMenu.DefaultItems.SaveToActiveFile/> */}
+          <MainMenu.DefaultItems.SaveAsImage />
+          <MainMenu.DefaultItems.Help />
+          <MainMenu.DefaultItems.ClearCanvas />
+          <MainMenu.DefaultItems.ChangeCanvasBackground />
+          {/* <MainMenu.DefaultItems.LiveCollaborationTrigger/> */}
+
+        </MainMenu>
+
+
+
 
         {functionPlots.map((plot, index) => (
           <Draggable key={index}>
@@ -869,11 +1253,13 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
           </Draggable>
         ))}
 
+
+
         <Footer>
 
-          <div onClick={() => setIsFullscreen((prev) => !prev)} className={`mx-2 cursor-pointer flex rounded-[10px] items-center justify-center ${isdarkMode ? 'bg-[#232329]' : 'bg-[#ECECF4]'}`}>
+          {/* <div onClick={() => setIsFullscreen((prev) => !prev)} className={`mx-2 cursor-pointer flex rounded-[10px] items-center justify-center ${isdarkMode ? 'bg-[#232329]' : 'bg-[#ECECF4]'}`}>
             {isFullscreen ? <Minimize size={22} className={` h-7 w-10 p-1  ${isdarkMode ? 'text-white' : 'text-black'} `} /> : <Expand size={22} className={` h-7 w-10 p-1  ${isdarkMode ? 'text-white' : 'text-black'} `} />}
-          </div>
+          </div> */}
           <div onClick={() => setIsdarkMode((prev) => !prev)} className={`mx-2 cursor-pointer flex rounded-[10px] items-center justify-center ${isdarkMode ? 'bg-[#232329]' : 'bg-[#ECECF4]'}  `}>
             {isdarkMode ? <Moon size={22} className={` h-7 w-10 p-1  ${isdarkMode ? 'text-white' : 'text-black'} `} /> : <Sun size={22} className={` h-7 w-10 p-1  ${isdarkMode ? 'text-white' : 'text-black'} `} />}
           </div>
@@ -955,6 +1341,7 @@ const Canvas: React.FC<CanvasProps> = ({session,setSession}) => {
         </Footer>
       </Excalidraw>
     </div>
+
   );
 };
 

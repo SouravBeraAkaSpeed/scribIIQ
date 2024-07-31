@@ -28,6 +28,11 @@ yarn-error.log*
 # local env files
 .env*.local
 
+/.env
+/components/Canvas
+/provider/liveblocks-provider
+
+
 # vercel
 .vercel
 

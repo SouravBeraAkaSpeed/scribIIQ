@@ -7,9 +7,8 @@ import {
   getProviders,
   LiteralUnion,
   signIn,
-  useSession,
+
 } from "next-auth/react";
-import { IconBrandGithub, IconBrandGoogle } from "@tabler/icons-react";
 import { Boxes } from "@/components/background-box";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/input";
@@ -228,17 +227,17 @@ const SignUp = () => {
   };
 
   return (
-    <div className="relative flex h-full min-h-screen w-full flex-col items-center justify-center overflow-hidden rounded-lg bg-black">
+    <div className="relative flex h-full min-h-screen w-full flex-col items-center justify-center overflow-hidden  bg-black">
       <div className="pointer-events-none absolute inset-0 z-20 h-full w-full bg-black [mask-image:radial-gradient(transparent,white)]" />
 
       <Boxes />
-      <div className="z-50 my-2 flex h-full max-w-md flex-col items-center justify-center">
-        <h2 className=" text-left text-2xl font-bold">Welcome To Toil Labs</h2>
+      <div className="z-50 my-2 flex h-full max-w-md flex-col items-center justify-center  text-white">
+        <h2 className=" text-left text-2xl font-bold">Welcome To ScribIQ</h2>
         <h4 className="text-md my-2 text-left">
-          Empowering human growth through innovation
+          By Toil Labs
         </h4>
       </div>
-      <div className="z-50 flex h-full w-[90%] flex-col items-center justify-center rounded-[14px] bg-black shadow-input shadow-purple-400 md:max-w-md">
+      <div className="z-50 flex h-full w-[90%] flex-col items-center  text-white justify-center rounded-[14px] bg-black shadow-input  md:max-w-md">
         <form onSubmit={handleSignUp} className="w-full    p-6 ">
           <div className=" my-4 flex space-x-2 ">
             <div className=" w-1/2">

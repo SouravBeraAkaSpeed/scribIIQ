@@ -285,19 +285,19 @@ const SignIn = () => {
   };
 
   return (
-    <div className="relative flex h-full min-h-screen w-full flex-col items-center justify-center overflow-hidden rounded-lg bg-black">
+    <div className="relative flex h-full min-h-screen w-full flex-col items-center justify-center overflow-hidden  bg-black">
       <div className="pointer-events-none absolute inset-0 z-20 h-full w-full bg-black [mask-image:radial-gradient(transparent,white)]" />
 
       <Boxes />
-      <div className="z-50 my-2 flex h-full max-w-md flex-col items-center justify-center">
+      <div className="z-50 my-2 flex h-fit max-w-md flex-col items-center justify-center text-white">
         <h2 className=" text-left text-2xl font-bold">
-          Welcome Back To Toil Labs
+          Welcome Back 
         </h2>
         <h4 className="text-md my-2 text-left">
           Empowering human growth through innovation
         </h4>
       </div>
-      <div className="z-50 flex h-full md:w-[32%] w-[90%] flex-col  items-center justify-center rounded-[14px] bg-black shadow-input shadow-purple-400 ">
+      <div className="z-50 flex h-fit md:w-[32%] w-[90%] flex-col text-white items-center justify-center rounded-[14px] bg-black shadow-input ">
         <form onSubmit={handleSignIn} className="w-full    p-6 ">
           <div className="my-4">
             <Label className="my-2 font-bold">Email</Label>
