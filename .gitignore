@@ -2,8 +2,8 @@
 
 # dependencies
 /node_modules
-/src/components/Canvas/canvas.tsx
-/src/components/provider/liveblocks-provider
+/src/components/Canvas
+/src/components/provider
 /.pnp
 .pnp.js
 .yarn/install-state.gz
